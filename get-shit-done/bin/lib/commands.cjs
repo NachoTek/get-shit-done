@@ -8,6 +8,8 @@ const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, com
 const { extractFrontmatter } = require('./frontmatter.cjs');
 const profiles = require('./profiles.cjs');
 const profileResolution = require('./profile-resolution.cjs');
+const modelDetection = require('./model-detection.cjs');
+const interactivePrompts = require('./interactive-prompts.cjs');
 
 function cmdGenerateSlug(text, raw) {
   if (!text) {
@@ -811,6 +813,212 @@ function cmdViewProfile(cwd, profileName, raw) {
   process.stdout.write(text);
 }
 
+// ─── Update Profile Command ───────────────────────────────────────────────────────
+
+function showUpdateProfileHelp() {
+  const help = `Usage: gsd-tools update-profile <profile-name> [--raw]
+
+Update an existing custom profile's model assignments.
+
+Arguments:
+  profile-name  Name of the profile to update (required)
+
+Options:
+  --raw         Output as JSON for programmatic use
+
+Examples:
+  gsd-tools update-profile my-custom
+  gsd-tools update-profile my-custom --raw
+
+Notes:
+  - Built-in profiles (quality, balanced, budget) cannot be modified
+  - Use "gsd-tools list-profiles" to see available profiles
+  - Interactive prompts will ask for new model selections
+`;
+  process.stdout.write(help);
+}
+
+async function cmdUpdateProfile(cwd, profileName, raw) {
+  // If no profile name, show help
+  if (!profileName) {
+    showUpdateProfileHelp();
+    return;
+  }
+
+  // Check if it's a built-in profile (quality/balanced/budget)
+  const builtInProfiles = ['quality', 'balanced', 'budget'];
+  if (builtInProfiles.includes(profileName.toLowerCase())) {
+    const errorMsg = `Built-in profiles (quality, balanced, budget) cannot be modified. Create a custom profile instead.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Find the custom profile
+  const profile = profileResolution.findCustomProfile(cwd, profileName);
+  if (!profile) {
+    const errorMsg = `Profile '${profileName}' not found. Use 'gsd-tools list-profiles' to see available profiles.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Determine source (global vs project) by checking project storage first
+  const projectResult = profiles.loadProjectProfiles(cwd);
+  const projectNames = new Set(projectResult.profiles.map(p => p.name));
+  const storageLocation = projectNames.has(profileName) ? 'project' : 'global';
+
+  // Display current model assignments
+  if (!raw) {
+    process.stdout.write(`Updating profile: ${profileName}\n`);
+    process.stdout.write(`Source: ${storageLocation}\n\n`);
+    process.stdout.write(`Current model assignments:\n`);
+    process.stdout.write(`  Planning:  ${profile.agents?.planning?.[0] || '-'}\n`);
+    process.stdout.write(`  Execution: ${profile.agents?.execution?.[0] || '-'}\n`);
+    process.stdout.write(`  Research:  ${profile.agents?.research?.[0] || '-'}\n\n`);
+    process.stdout.write(`Enter new model selections:\n\n`);
+  }
+
+  // Detect available models
+  const detection = modelDetection.detectAvailableModels(cwd);
+  const availableModels = detection.models;
+  const modelNames = new Set(availableModels.map(m => m.name));
+
+  // Get new model selections via interactive prompts
+  const selections = await interactivePrompts.promptThreeQuestionFlow(availableModels);
+
+  // Build updated profile object
+  const updatedProfile = {
+    name: profileName,
+    agents: {
+      planning: selections.planning ? [selections.planning] : [],
+      execution: selections.execution ? [selections.execution] : [],
+      research: selections.research ? [selections.research] : []
+    }
+  };
+
+  // Validate profile structure
+  const validation = profiles.validateProfile(updatedProfile);
+  if (!validation.valid) {
+    const errorMsg = 'Invalid profile structure:\n' + validation.errors.join('\n');
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Validate model names against available models
+  const missingModels = [];
+  const selectedModels = [
+    ...updatedProfile.agents.planning,
+    ...updatedProfile.agents.execution,
+    ...updatedProfile.agents.research
+  ];
+
+  for (const modelName of selectedModels) {
+    if (!modelNames.has(modelName)) {
+      missingModels.push(modelName);
+    }
+  }
+
+  if (missingModels.length > 0) {
+    const errorMsg = `Model(s) not available: ${missingModels.join(', ')}\nAvailable models: ${Array.from(modelNames).join(', ')}`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Load profiles from original storage location
+  let existingProfiles;
+  if (storageLocation === 'global') {
+    const loadResult = profiles.loadGlobalProfiles(detection.runtime);
+    if (loadResult.errors.length > 0) {
+      const errorMsg = 'Failed to load global profiles:\n' + loadResult.errors.join('\n');
+      if (raw) {
+        output({ error: errorMsg }, raw);
+      } else {
+        error(errorMsg);
+      }
+      return;
+    }
+    existingProfiles = loadResult.profiles;
+  } else {
+    const loadResult = profiles.loadProjectProfiles(cwd);
+    if (loadResult.errors.length > 0) {
+      const errorMsg = 'Failed to load project profiles:\n' + loadResult.errors.join('\n');
+      if (raw) {
+        output({ error: errorMsg }, raw);
+      } else {
+        error(errorMsg);
+      }
+      return;
+    }
+    existingProfiles = loadResult.profiles;
+  }
+
+  // Find and update the profile in the array
+  const profileIndex = existingProfiles.findIndex(p => p.name === profileName);
+  if (profileIndex === -1) {
+    const errorMsg = `Profile '${profileName}' not found in ${storageLocation} storage.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  existingProfiles[profileIndex] = updatedProfile;
+
+  // Save profiles to original storage location
+  let saveResult;
+  if (storageLocation === 'global') {
+    saveResult = profiles.saveGlobalProfiles(detection.runtime, existingProfiles);
+  } else {
+    saveResult = profiles.saveProjectProfiles(cwd, existingProfiles);
+  }
+
+  if (!saveResult.saved) {
+    const errorMsg = 'Failed to save profile:\n' + saveResult.errors.join('\n');
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Output success
+  const result = {
+    updated: true,
+    profile: profileName,
+    storage: storageLocation,
+    path: saveResult.path,
+    agents: updatedProfile.agents
+  };
+
+  if (raw) {
+    output(result, raw);
+  } else {
+    process.stdout.write(`\nProfile '${profileName}' updated successfully.\n\n`);
+    process.stdout.write(`New model assignments:\n`);
+    process.stdout.write(`  Planning:  ${updatedProfile.agents.planning?.[0] || '-'}\n`);
+    process.stdout.write(`  Execution: ${updatedProfile.agents.execution?.[0] || '-'}\n`);
+    process.stdout.write(`  Research:  ${updatedProfile.agents.research?.[0] || '-'}\n`);
+  }
+}
+
 module.exports = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
@@ -829,4 +1037,6 @@ module.exports = {
   cmdListProfiles,
   showViewProfileHelp,
   cmdViewProfile,
+  showUpdateProfileHelp,
+  cmdUpdateProfile,
 };
