@@ -10,6 +10,7 @@ const profiles = require('./profiles.cjs');
 const profileResolution = require('./profile-resolution.cjs');
 const modelDetection = require('./model-detection.cjs');
 const interactivePrompts = require('./interactive-prompts.cjs');
+const config = require('./config.cjs');
 
 function cmdGenerateSlug(text, raw) {
   if (!text) {
@@ -813,6 +814,93 @@ function cmdViewProfile(cwd, profileName, raw) {
   process.stdout.write(text);
 }
 
+// ─── Set Profile Command ───────────────────────────────────────────────────────
+
+function showSetProfileHelp() {
+  const help = `Usage: gsd-tools set-profile <profile-name> [--raw]
+
+Set the active profile for model resolution.
+
+Arguments:
+  profile-name  Name of the profile to activate
+                Can be a custom profile name or legacy profile (quality/balanced/budget)
+
+Options:
+  --raw         Output as JSON for programmatic use
+
+Examples:
+  gsd-tools set-profile quality
+  gsd-tools set-profile balanced
+  gsd-tools set-profile my-custom-profile
+  gsd-tools set-profile my-custom --raw
+
+Use "gsd-tools list-profiles" to see all available profiles.
+`;
+  process.stdout.write(help);
+}
+
+function cmdSetProfile(cwd, profileName, raw) {
+  // If no profile name, show help
+  if (!profileName) {
+    showSetProfileHelp();
+    return;
+  }
+
+  // Define legacy profiles
+  const legacyProfiles = ['quality', 'balanced', 'budget'];
+  const isLegacy = legacyProfiles.includes(profileName.toLowerCase());
+
+  if (isLegacy) {
+    // Normalize to lowercase
+    const normalizedProfile = profileName.toLowerCase();
+
+    // Set legacy profile (clear custom profile name)
+    config.cmdConfigSet(cwd, 'model_profile', normalizedProfile, true);
+    config.cmdConfigSet(cwd, 'model_profile_name', '', true);
+
+    const result = {
+      set: true,
+      profile: normalizedProfile,
+      type: 'legacy'
+    };
+
+    if (raw) {
+      output(result, raw);
+    } else {
+      process.stdout.write(`\nProfile set to: ${normalizedProfile} (legacy)\n\n`);
+    }
+  } else {
+    // Check if custom profile exists
+    const customProfile = profileResolution.findCustomProfile(cwd, profileName);
+
+    if (!customProfile) {
+      const errorMsg = `Profile '${profileName}' not found. Use 'gsd-tools list-profiles' to see available profiles.`;
+      if (raw) {
+        output({ error: errorMsg }, raw);
+      } else {
+        error(errorMsg);
+      }
+      return;
+    }
+
+    // Set custom profile (clear legacy profile)
+    config.cmdConfigSet(cwd, 'model_profile_name', profileName, true);
+    config.cmdConfigSet(cwd, 'model_profile', '', true);
+
+    const result = {
+      set: true,
+      profile: profileName,
+      type: 'custom'
+    };
+
+    if (raw) {
+      output(result, raw);
+    } else {
+      process.stdout.write(`\nProfile set to: ${profileName} (custom)\n\n`);
+    }
+  }
+}
+
 // ─── Delete Profile Command ───────────────────────────────────────────────────────
 
 function showDeleteProfileHelp() {
@@ -1204,6 +1292,8 @@ module.exports = {
   cmdListProfiles,
   showViewProfileHelp,
   cmdViewProfile,
+  showSetProfileHelp,
+  cmdSetProfile,
   showUpdateProfileHelp,
   cmdUpdateProfile,
   showDeleteProfileHelp,

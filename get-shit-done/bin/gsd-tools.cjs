@@ -175,7 +175,7 @@ async function main() {
   const command = args[0];
 
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, interactive-profile, create-profile, list-profiles, view-profile, update-profile, delete-profile, init');
+    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, interactive-profile, create-profile, list-profiles, view-profile, set-profile, update-profile, delete-profile, init');
   }
 
   switch (command) {
@@ -761,6 +761,17 @@ async function main() {
         commands.showViewProfileHelp();
       } else {
         commands.cmdViewProfile(cwd, profileName, raw);
+      }
+      break;
+    }
+
+    case 'set-profile': {
+      const setProfileName = args[1];
+      const setHelpFlag = args.includes('--help') || args.includes('-h');
+      if (setHelpFlag || !setProfileName) {
+        commands.showSetProfileHelp();
+      } else {
+        commands.cmdSetProfile(cwd, setProfileName, raw);
       }
       break;
     }
