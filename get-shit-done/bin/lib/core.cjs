@@ -433,4 +433,6 @@ module.exports = {
   toPosixPath,
   findPhaseInternal,
   resolveModelInternal,
+  resolveModelEnhanced: (...args) => require('./profile-resolution.cjs').resolveModelEnhanced(...args),
+  resolveModelWithDetails: (...args) => require('./profile-resolution.cjs').resolveModelWithDetails(...args),
 };
