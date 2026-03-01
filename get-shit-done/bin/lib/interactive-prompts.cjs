@@ -368,6 +368,49 @@ async function promptStorageLocation(globalPath, projectPath, rl) {
   });
 }
 
+// ─── Delete Confirmation Prompt ───────────────────────────────────────────────────
+
+/**
+ * Prompt user to confirm deletion of active profile
+ * @param {string} profileName - Name of profile being deleted
+ * @param {readline.Interface} rl - Readline interface (optional, creates if not provided)
+ * @returns {Promise<boolean>} True if user confirms deletion, false otherwise
+ */
+async function promptDeleteConfirmation(profileName, rl) {
+  const shouldCloseRl = !rl;
+  rl = rl || createReadlineInterface();
+
+  return new Promise((resolve) => {
+    const maxAttempts = 3;
+    let attempts = 0;
+
+    console.log(`\nWARNING: Profile '${profileName}' is currently active.`);
+    console.log('Deleting it will leave no profile selected.\n');
+
+    const promptUser = () => {
+      attempts++;
+      rl.question('Type "delete" to confirm deletion, or anything else to cancel: ', (input) => {
+        const trimmed = input.trim().toLowerCase();
+
+        if (trimmed === 'delete') {
+          console.log('');
+          if (shouldCloseRl) closeReadlineInterface(rl);
+          resolve(true);
+        } else if (attempts < maxAttempts) {
+          console.log('Cancelled. Please type "delete" exactly to confirm.\n');
+          promptUser();
+        } else {
+          console.log('Maximum attempts reached. Deletion cancelled.\n');
+          if (shouldCloseRl) closeReadlineInterface(rl);
+          resolve(false);
+        }
+      });
+    };
+
+    promptUser();
+  });
+}
+
 module.exports = {
   // Display functions
   displayModelsGrouped,
@@ -375,6 +418,7 @@ module.exports = {
   // Prompt functions
   promptModelSelection,
   promptThreeQuestionFlow,
+  promptDeleteConfirmation,
 
   // Profile creation prompts
   promptProfileName,

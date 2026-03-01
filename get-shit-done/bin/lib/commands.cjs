@@ -813,6 +813,173 @@ function cmdViewProfile(cwd, profileName, raw) {
   process.stdout.write(text);
 }
 
+// ─── Delete Profile Command ───────────────────────────────────────────────────────
+
+function showDeleteProfileHelp() {
+  const help = `Usage: gsd-tools delete-profile <profile-name> [--raw]
+
+Delete a custom profile permanently.
+
+Arguments:
+  profile-name    Name of the profile to delete (required)
+
+Options:
+  --raw           Output as JSON for programmatic use
+
+Examples:
+  gsd-tools delete-profile my-custom
+  gsd-tools delete-profile my-custom --raw
+
+Notes:
+  - Built-in profiles (quality, balanced, budget) cannot be deleted
+  - Active profiles require confirmation before deletion
+  - Use "gsd-tools list-profiles" to see available profiles
+`;
+  process.stdout.write(help);
+}
+
+async function cmdDeleteProfile(cwd, profileName, raw) {
+  // If no profile name, show help
+  if (!profileName) {
+    showDeleteProfileHelp();
+    return;
+  }
+
+  // Check if it's a built-in profile (quality/balanced/budget)
+  const builtInProfiles = ['quality', 'balanced', 'budget'];
+  if (builtInProfiles.includes(profileName.toLowerCase())) {
+    const errorMsg = `Built-in profiles (quality, balanced, budget) cannot be deleted.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Find the custom profile
+  const profile = profileResolution.findCustomProfile(cwd, profileName);
+  if (!profile) {
+    const errorMsg = `Profile '${profileName}' not found. Use 'gsd-tools list-profiles' to see available profiles.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Determine source (global vs project) by checking project storage first
+  const projectResult = profiles.loadProjectProfiles(cwd);
+  const projectNames = new Set(projectResult.profiles.map(p => p.name));
+  const storageLocation = projectNames.has(profileName) ? 'project' : 'global';
+
+  // Check if profile is active
+  const config = loadConfig(cwd);
+  const isActive = config.model_profile_name === profileName;
+
+  // If active, prompt for confirmation
+  if (isActive) {
+    const confirmed = await interactivePrompts.promptDeleteConfirmation(profileName);
+    if (!confirmed) {
+      const result = {
+        deleted: false,
+        profile: profileName,
+        reason: 'User cancelled deletion of active profile'
+      };
+      if (raw) {
+        output(result, raw);
+      } else {
+        process.stdout.write(`\nDeletion cancelled. Profile '${profileName}' remains active.\n`);
+      }
+      return;
+    }
+  }
+
+  // Load profiles from determined storage location
+  let existingProfiles;
+  if (storageLocation === 'global') {
+    const detection = modelDetection.detectAvailableModels(cwd);
+    const loadResult = profiles.loadGlobalProfiles(detection.runtime);
+    if (loadResult.errors.length > 0) {
+      const errorMsg = 'Failed to load global profiles:\n' + loadResult.errors.join('\n');
+      if (raw) {
+        output({ error: errorMsg }, raw);
+      } else {
+        error(errorMsg);
+      }
+      return;
+    }
+    existingProfiles = loadResult.profiles;
+  } else {
+    const loadResult = profiles.loadProjectProfiles(cwd);
+    if (loadResult.errors.length > 0) {
+      const errorMsg = 'Failed to load project profiles:\n' + loadResult.errors.join('\n');
+      if (raw) {
+        output({ error: errorMsg }, raw);
+      } else {
+        error(errorMsg);
+      }
+      return;
+    }
+    existingProfiles = loadResult.profiles;
+  }
+
+  // Find and remove the profile from the array
+  const profileIndex = existingProfiles.findIndex(p => p.name === profileName);
+  if (profileIndex === -1) {
+    const errorMsg = `Profile '${profileName}' not found in ${storageLocation} storage.`;
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  existingProfiles.splice(profileIndex, 1);
+
+  // Save profiles to storage location
+  let saveResult;
+  if (storageLocation === 'global') {
+    const detection = modelDetection.detectAvailableModels(cwd);
+    saveResult = profiles.saveGlobalProfiles(detection.runtime, existingProfiles);
+  } else {
+    saveResult = profiles.saveProjectProfiles(cwd, existingProfiles);
+  }
+
+  if (!saveResult.saved) {
+    const errorMsg = 'Failed to save profile:\n' + saveResult.errors.join('\n');
+    if (raw) {
+      output({ error: errorMsg }, raw);
+    } else {
+      error(errorMsg);
+    }
+    return;
+  }
+
+  // Output success
+  const result = {
+    deleted: true,
+    profile: profileName,
+    storage: storageLocation,
+    path: saveResult.path,
+    was_active: isActive
+  };
+
+  if (raw) {
+    output(result, raw);
+  } else {
+    if (isActive) {
+      process.stdout.write(`\nProfile '${profileName}' deleted successfully.\n`);
+      process.stdout.write(`Note: This was the active profile. No profile is currently selected.\n`);
+      process.stdout.write(`Use 'gsd-tools set-profile <name>' to activate a different profile.\n\n`);
+    } else {
+      process.stdout.write(`\nProfile '${profileName}' deleted successfully.\n\n`);
+    }
+  }
+}
+
 // ─── Update Profile Command ───────────────────────────────────────────────────────
 
 function showUpdateProfileHelp() {
@@ -1039,4 +1206,6 @@ module.exports = {
   cmdViewProfile,
   showUpdateProfileHelp,
   cmdUpdateProfile,
+  showDeleteProfileHelp,
+  cmdDeleteProfile,
 };
