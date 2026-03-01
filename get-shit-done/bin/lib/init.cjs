@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { loadConfig, resolveModelInternal, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, normalizePhaseName, toPosixPath, output, error } = require('./core.cjs');
+const { loadConfig, resolveModelEnhanced, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, normalizePhaseName, toPosixPath, output, error } = require('./core.cjs');
 
 function cmdInitExecutePhase(cwd, phase, raw) {
   if (!phase) {
@@ -25,8 +25,8 @@ function cmdInitExecutePhase(cwd, phase, raw) {
 
   const result = {
     // Models
-    executor_model: resolveModelInternal(cwd, 'gsd-executor'),
-    verifier_model: resolveModelInternal(cwd, 'gsd-verifier'),
+    executor_model: resolveModelEnhanced(cwd, 'gsd-executor'),
+    verifier_model: resolveModelEnhanced(cwd, 'gsd-verifier'),
 
     // Config flags
     commit_docs: config.commit_docs,
@@ -97,9 +97,9 @@ function cmdInitPlanPhase(cwd, phase, raw) {
 
   const result = {
     // Models
-    researcher_model: resolveModelInternal(cwd, 'gsd-phase-researcher'),
-    planner_model: resolveModelInternal(cwd, 'gsd-planner'),
-    checker_model: resolveModelInternal(cwd, 'gsd-plan-checker'),
+    researcher_model: resolveModelEnhanced(cwd, 'gsd-phase-researcher'),
+    planner_model: resolveModelEnhanced(cwd, 'gsd-planner'),
+    checker_model: resolveModelEnhanced(cwd, 'gsd-plan-checker'),
 
     // Workflow flags
     research_enabled: config.research,
@@ -187,9 +187,9 @@ function cmdInitNewProject(cwd, raw) {
 
   const result = {
     // Models
-    researcher_model: resolveModelInternal(cwd, 'gsd-project-researcher'),
-    synthesizer_model: resolveModelInternal(cwd, 'gsd-research-synthesizer'),
-    roadmapper_model: resolveModelInternal(cwd, 'gsd-roadmapper'),
+    researcher_model: resolveModelEnhanced(cwd, 'gsd-project-researcher'),
+    synthesizer_model: resolveModelEnhanced(cwd, 'gsd-research-synthesizer'),
+    roadmapper_model: resolveModelEnhanced(cwd, 'gsd-roadmapper'),
 
     // Config
     commit_docs: config.commit_docs,
@@ -224,9 +224,9 @@ function cmdInitNewMilestone(cwd, raw) {
 
   const result = {
     // Models
-    researcher_model: resolveModelInternal(cwd, 'gsd-project-researcher'),
-    synthesizer_model: resolveModelInternal(cwd, 'gsd-research-synthesizer'),
-    roadmapper_model: resolveModelInternal(cwd, 'gsd-roadmapper'),
+    researcher_model: resolveModelEnhanced(cwd, 'gsd-project-researcher'),
+    synthesizer_model: resolveModelEnhanced(cwd, 'gsd-research-synthesizer'),
+    roadmapper_model: resolveModelEnhanced(cwd, 'gsd-roadmapper'),
 
     // Config
     commit_docs: config.commit_docs,
@@ -270,10 +270,10 @@ function cmdInitQuick(cwd, description, raw) {
 
   const result = {
     // Models
-    planner_model: resolveModelInternal(cwd, 'gsd-planner'),
-    executor_model: resolveModelInternal(cwd, 'gsd-executor'),
-    checker_model: resolveModelInternal(cwd, 'gsd-plan-checker'),
-    verifier_model: resolveModelInternal(cwd, 'gsd-verifier'),
+    planner_model: resolveModelEnhanced(cwd, 'gsd-planner'),
+    executor_model: resolveModelEnhanced(cwd, 'gsd-executor'),
+    checker_model: resolveModelEnhanced(cwd, 'gsd-plan-checker'),
+    verifier_model: resolveModelEnhanced(cwd, 'gsd-verifier'),
 
     // Config
     commit_docs: config.commit_docs,
@@ -342,8 +342,8 @@ function cmdInitVerifyWork(cwd, phase, raw) {
 
   const result = {
     // Models
-    planner_model: resolveModelInternal(cwd, 'gsd-planner'),
-    checker_model: resolveModelInternal(cwd, 'gsd-plan-checker'),
+    planner_model: resolveModelEnhanced(cwd, 'gsd-planner'),
+    checker_model: resolveModelEnhanced(cwd, 'gsd-plan-checker'),
 
     // Config
     commit_docs: config.commit_docs,
@@ -574,7 +574,7 @@ function cmdInitMapCodebase(cwd, raw) {
 
   const result = {
     // Models
-    mapper_model: resolveModelInternal(cwd, 'gsd-codebase-mapper'),
+    mapper_model: resolveModelEnhanced(cwd, 'gsd-codebase-mapper'),
 
     // Config
     commit_docs: config.commit_docs,
@@ -658,8 +658,8 @@ function cmdInitProgress(cwd, raw) {
 
   const result = {
     // Models
-    executor_model: resolveModelInternal(cwd, 'gsd-executor'),
-    planner_model: resolveModelInternal(cwd, 'gsd-planner'),
+    executor_model: resolveModelEnhanced(cwd, 'gsd-executor'),
+    planner_model: resolveModelEnhanced(cwd, 'gsd-planner'),
 
     // Config
     commit_docs: config.commit_docs,
