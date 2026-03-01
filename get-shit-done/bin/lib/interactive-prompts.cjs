@@ -263,6 +263,111 @@ async function promptThreeQuestionFlow(models) {
   }
 }
 
+// ─── Profile Creation Prompts ───────────────────────────────────────────────────────
+
+/**
+ * Prompt user for profile name with validation
+ * @param {readline.Interface} rl - Readline interface (optional, creates if not provided)
+ * @returns {Promise<string>} Valid profile name or empty string on failure
+ */
+async function promptProfileName(rl) {
+  const shouldCloseRl = !rl;
+  rl = rl || createReadlineInterface();
+
+  return new Promise((resolve) => {
+    const maxAttempts = 3;
+    let attempts = 0;
+
+    const promptUser = () => {
+      attempts++;
+      rl.question('Enter profile name: ', (input) => {
+        const trimmed = input.trim();
+
+        // Validate: alphanumeric, hyphens, underscores only
+        if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+          if (attempts < maxAttempts) {
+            console.log('Invalid profile name. Use only letters, numbers, hyphens, and underscores.\n');
+            promptUser();
+          } else {
+            console.log('Maximum attempts reached. Proceeding without profile name.\n');
+            if (shouldCloseRl) closeReadlineInterface(rl);
+            resolve('');
+          }
+          return;
+        }
+
+        // Validate: max 64 characters
+        if (trimmed.length > 64) {
+          if (attempts < maxAttempts) {
+            console.log('Profile name must be 64 characters or less. Please try again.\n');
+            promptUser();
+          } else {
+            console.log('Maximum attempts reached. Proceeding without profile name.\n');
+            if (shouldCloseRl) closeReadlineInterface(rl);
+            resolve('');
+          }
+          return;
+        }
+
+        console.log(`  Profile name: ${trimmed}\n`);
+        if (shouldCloseRl) closeReadlineInterface(rl);
+        resolve(trimmed);
+      });
+    };
+
+    promptUser();
+  });
+}
+
+/**
+ * Prompt user for storage location (global or project)
+ * @param {string} globalPath - Path to global profiles.json
+ * @param {string} projectPath - Path to project profiles.json
+ * @param {readline.Interface} rl - Readline interface (optional, creates if not provided)
+ * @returns {Promise<'global' | 'project' | ''>} Storage location or empty string on failure
+ */
+async function promptStorageLocation(globalPath, projectPath, rl) {
+  const shouldCloseRl = !rl;
+  rl = rl || createReadlineInterface();
+
+  return new Promise((resolve) => {
+    const maxAttempts = 3;
+    let attempts = 0;
+
+    const promptUser = () => {
+      attempts++;
+      console.log(`Select storage location:`);
+      console.log(`  [1] Global: ${globalPath}`);
+      console.log(`  [2] Project: ${projectPath}\n`);
+
+      rl.question('Enter selection [1-2]: ', (input) => {
+        const trimmed = input.trim();
+        const selection = parseInt(trimmed, 10);
+
+        if (isNaN(selection) || (selection !== 1 && selection !== 2)) {
+          if (attempts < maxAttempts) {
+            console.log('Invalid selection. Please enter 1 or 2.\n');
+            promptUser();
+          } else {
+            console.log('Maximum attempts reached. Proceeding without storage selection.\n');
+            if (shouldCloseRl) closeReadlineInterface(rl);
+            resolve('');
+          }
+          return;
+        }
+
+        const location = selection === 1 ? 'global' : 'project';
+        const locationName = selection === 1 ? 'Global' : 'Project';
+        console.log(`  Storage: ${locationName}\n`);
+        if (shouldCloseRl) closeReadlineInterface(rl);
+        resolve(location);
+      });
+    };
+
+    promptUser();
+  });
+}
+
 module.exports = {
   // Display functions
   displayModelsGrouped,
@@ -270,6 +375,10 @@ module.exports = {
   // Prompt functions
   promptModelSelection,
   promptThreeQuestionFlow,
+
+  // Profile creation prompts
+  promptProfileName,
+  promptStorageLocation,
 
   // Helper functions
   getProviderDisplayName,
