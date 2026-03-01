@@ -6,6 +6,96 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { loadConfig, resolveModelEnhanced, findPhaseInternal, getRoadmapPhaseInternal, pathExistsInternal, generateSlugInternal, getMilestoneInfo, normalizePhaseName, toPosixPath, output, error } = require('./core.cjs');
+const profiles = require('./profiles.cjs');
+const { resolveModelWithDetails } = require('./profile-resolution.cjs');
+
+// ─── Profile Transparency Helper (INTG-03) ─────────────────────────────────────
+
+/**
+ * Get profile transparency information for init command outputs.
+ * Returns details about which profile is active and where it comes from.
+ *
+ * @param {string} cwd - Project root directory
+ * @returns {{
+ *   active_profile: string,
+ *   profile_source: 'project' | 'global' | 'legacy' | 'default',
+ *   is_custom: boolean,
+ *   resolution_example?: { agent: string, tier: number, source: string, model: string }
+ * }}
+ */
+function getProfileTransparency(cwd) {
+  const config = loadConfig(cwd);
+
+  // Case 1: Custom profile is set (model_profile_name)
+  if (config.model_profile_name) {
+    const profileName = config.model_profile_name;
+
+    // Check project profiles first
+    const projectResult = profiles.loadProjectProfiles(cwd);
+    const projectNames = new Set(projectResult.profiles.map(p => p.name));
+
+    if (projectNames.has(profileName)) {
+      // Found in project profiles
+      const resolution = resolveModelWithDetails(cwd, 'gsd-executor');
+      const resolutionExample = resolution.resolution[0];
+      return {
+        active_profile: profileName,
+        profile_source: 'project',
+        is_custom: true,
+        resolution_example: resolutionExample ? {
+          agent: 'gsd-executor',
+          tier: resolutionExample.tier,
+          source: resolutionExample.source,
+          model: resolutionExample.model,
+        } : undefined,
+      };
+    }
+
+    // Check global profiles
+    const globalResult = profiles.loadGlobalProfiles();
+    const globalNames = new Set(globalResult.profiles.map(p => p.name));
+
+    if (globalNames.has(profileName)) {
+      // Found in global profiles
+      const resolution = resolveModelWithDetails(cwd, 'gsd-executor');
+      const resolutionExample = resolution.resolution[0];
+      return {
+        active_profile: profileName,
+        profile_source: 'global',
+        is_custom: true,
+        resolution_example: resolutionExample ? {
+          agent: 'gsd-executor',
+          tier: resolutionExample.tier,
+          source: resolutionExample.source,
+          model: resolutionExample.model,
+        } : undefined,
+      };
+    }
+
+    // Profile name set but not found - still report as custom but without resolution
+    return {
+      active_profile: profileName,
+      profile_source: 'global',
+      is_custom: true,
+    };
+  }
+
+  // Case 2: Legacy profile is set (model_profile)
+  if (config.model_profile) {
+    return {
+      active_profile: config.model_profile,
+      profile_source: 'legacy',
+      is_custom: false,
+    };
+  }
+
+  // Case 3: Neither set - use default
+  return {
+    active_profile: 'balanced',
+    profile_source: 'default',
+    is_custom: false,
+  };
+}
 
 function cmdInitExecutePhase(cwd, phase, raw) {
   if (!phase) {
@@ -75,6 +165,9 @@ function cmdInitExecutePhase(cwd, phase, raw) {
     state_path: '.planning/STATE.md',
     roadmap_path: '.planning/ROADMAP.md',
     config_path: '.planning/config.json',
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -156,6 +249,9 @@ function cmdInitPlanPhase(cwd, phase, raw) {
     } catch {}
   }
 
+  // Profile transparency (INTG-03)
+  result.profile_info = getProfileTransparency(cwd);
+
   output(result, raw);
 }
 
@@ -213,6 +309,9 @@ function cmdInitNewProject(cwd, raw) {
 
     // File paths
     project_path: '.planning/PROJECT.md',
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -245,6 +344,9 @@ function cmdInitNewMilestone(cwd, raw) {
     project_path: '.planning/PROJECT.md',
     roadmap_path: '.planning/ROADMAP.md',
     state_path: '.planning/STATE.md',
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -295,6 +397,8 @@ function cmdInitQuick(cwd, description, raw) {
     roadmap_exists: pathExistsInternal(cwd, '.planning/ROADMAP.md'),
     planning_exists: pathExistsInternal(cwd, '.planning'),
 
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -327,6 +431,9 @@ function cmdInitResume(cwd, raw) {
 
     // Config
     commit_docs: config.commit_docs,
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -356,6 +463,9 @@ function cmdInitVerifyWork(cwd, phase, raw) {
 
     // Existing artifacts
     has_verification: phaseInfo?.has_verification || false,
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -439,6 +549,9 @@ function cmdInitPhaseOp(cwd, phase, raw) {
     } catch {}
   }
 
+  // Profile transparency (INTG-03)
+  result.profile_info = getProfileTransparency(cwd);
+
   output(result, raw);
 }
 
@@ -496,6 +609,9 @@ function cmdInitTodos(cwd, area, raw) {
     planning_exists: pathExistsInternal(cwd, '.planning'),
     todos_dir_exists: pathExistsInternal(cwd, '.planning/todos'),
     pending_dir_exists: pathExistsInternal(cwd, '.planning/todos/pending'),
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -557,6 +673,9 @@ function cmdInitMilestoneOp(cwd, raw) {
     state_exists: pathExistsInternal(cwd, '.planning/STATE.md'),
     archive_exists: pathExistsInternal(cwd, '.planning/archive'),
     phases_dir_exists: pathExistsInternal(cwd, '.planning/phases'),
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -591,6 +710,9 @@ function cmdInitMapCodebase(cwd, raw) {
     // File existence
     planning_exists: pathExistsInternal(cwd, '.planning'),
     codebase_dir_exists: pathExistsInternal(cwd, '.planning/codebase'),
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
@@ -689,6 +811,9 @@ function cmdInitProgress(cwd, raw) {
     roadmap_path: '.planning/ROADMAP.md',
     project_path: '.planning/PROJECT.md',
     config_path: '.planning/config.json',
+
+    // Profile transparency (INTG-03)
+    profile_info: getProfileTransparency(cwd),
   };
 
   output(result, raw);
