@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, resolveModelInternal, MODEL_PROFILES, output, error, findPhaseInternal } = require('./core.cjs');
+const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, resolveModelWithDetails, MODEL_PROFILES, output, error, findPhaseInternal } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
 
 function cmdGenerateSlug(text, raw) {
@@ -204,12 +204,12 @@ function cmdResolveModel(cwd, agentType, raw) {
 
   const config = loadConfig(cwd);
   const profile = config.model_profile || 'balanced';
-  const model = resolveModelInternal(cwd, agentType);
+  const { model, resolution } = resolveModelWithDetails(cwd, agentType);
 
   const agentModels = MODEL_PROFILES[agentType];
   const result = agentModels
-    ? { model, profile }
-    : { model, profile, unknown_agent: true };
+    ? { model, profile, resolution }
+    : { model, profile, resolution, unknown_agent: true };
   output(result, raw, model);
 }
 
