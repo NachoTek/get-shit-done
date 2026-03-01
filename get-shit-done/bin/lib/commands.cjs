@@ -1068,6 +1068,124 @@ async function cmdDeleteProfile(cwd, profileName, raw) {
   }
 }
 
+// ─── Profile Info Command ───────────────────────────────────────────────────────
+
+function showProfileInfoHelp() {
+  const help = `gsd-tools profile-info
+
+Show information about the currently active profile.
+
+Usage:
+  gsd-tools profile-info          Show active profile with resolution examples
+  gsd-tools profile-info --raw    Output as JSON for scripting
+
+Output includes:
+  - Active profile name
+  - Profile source (project, global, legacy, or default)
+  - Resolution examples for each agent category
+  - All agent model assignments
+
+Examples:
+  gsd-tools profile-info
+  gsd-tools profile-info --raw | jq '.resolution_examples'
+`;
+  process.stdout.write(help);
+}
+
+function cmdProfileInfo(cwd, raw) {
+  // Load config to determine active profile
+  const config = loadConfig(cwd);
+  const activeCustomProfile = config.model_profile_name;
+  const activeLegacyProfile = config.model_profile || 'balanced';
+
+  // Determine active profile and source
+  let activeProfile;
+  let profileSource;
+  let isCustom = false;
+
+  if (activeCustomProfile) {
+    // Custom profile is active
+    const customProfile = profileResolution.findCustomProfile(cwd, activeCustomProfile);
+    if (customProfile) {
+      activeProfile = activeCustomProfile;
+      isCustom = true;
+
+      // Determine source (project vs global)
+      const projectResult = profiles.loadProjectProfiles(cwd);
+      const projectNames = new Set(projectResult.profiles.map(p => p.name));
+      profileSource = projectNames.has(activeCustomProfile) ? 'project' : 'global';
+    } else {
+      // Custom profile not found, fall back to legacy
+      activeProfile = activeLegacyProfile;
+      profileSource = 'legacy';
+    }
+  } else {
+    // Legacy profile is active
+    activeProfile = activeLegacyProfile;
+    profileSource = 'default';
+  }
+
+  // Get resolution examples for one agent from each category
+  const resolutionExamples = [];
+
+  // Planning: gsd-planner
+  const plannerResult = resolveModelWithDetails(cwd, 'gsd-planner');
+  resolutionExamples.push({
+    category: 'planning',
+    agent: 'gsd-planner',
+    model: plannerResult.model,
+    tier: plannerResult.resolution?.tier || null,
+    source: plannerResult.resolution?.source || null,
+  });
+
+  // Execution: gsd-executor
+  const executorResult = resolveModelWithDetails(cwd, 'gsd-executor');
+  resolutionExamples.push({
+    category: 'execution',
+    agent: 'gsd-executor',
+    model: executorResult.model,
+    tier: executorResult.resolution?.tier || null,
+    source: executorResult.resolution?.source || null,
+  });
+
+  // Research: gsd-phase-researcher
+  const researcherResult = resolveModelWithDetails(cwd, 'gsd-phase-researcher');
+  resolutionExamples.push({
+    category: 'research',
+    agent: 'gsd-phase-researcher',
+    model: researcherResult.model,
+    tier: researcherResult.resolution?.tier || null,
+    source: researcherResult.resolution?.source || null,
+  });
+
+  const result = {
+    active_profile: activeProfile,
+    profile_source: profileSource,
+    is_custom: isCustom,
+    resolution_examples: resolutionExamples,
+  };
+
+  if (raw) {
+    output(result, raw);
+    return;
+  }
+
+  // Human-readable format
+  let text = `Active Profile: ${activeProfile}\n`;
+  text += `Source: ${profileSource}\n`;
+  text += `Custom: ${isCustom ? 'Yes' : 'No'}\n\n`;
+
+  text += `Resolution Examples:\n`;
+  for (const example of resolutionExamples) {
+    text += `  [${example.category}] ${example.agent} → ${example.model}\n`;
+    if (example.tier) {
+      text += `    Tier: ${example.tier}, Source: ${example.source || 'profile'}\n`;
+    }
+  }
+
+  process.stdout.write(text);
+}
+
 // ─── Update Profile Command ───────────────────────────────────────────────────────
 
 function showUpdateProfileHelp() {
@@ -1298,4 +1416,6 @@ module.exports = {
   cmdUpdateProfile,
   showDeleteProfileHelp,
   cmdDeleteProfile,
+  showProfileInfoHelp,
+  cmdProfileInfo,
 };
