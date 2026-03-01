@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const modelDetection = require('./model-detection.cjs');
 
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
@@ -411,22 +412,25 @@ function getMilestoneInfo(cwd) {
 
 module.exports = {
   MODEL_PROFILES,
-  output,
+  detectAvailableModels: modelDetection.detectAvailableModels,
+  detectRuntime: modelDetection.detectRuntime,
   error,
-  safeReadFile,
-  loadConfig,
-  isGitIgnored,
-  execGit,
   escapeRegex,
-  normalizePhaseName,
   comparePhaseNum,
-  searchPhaseInDir,
-  findPhaseInternal,
-  getArchivedPhaseDirs,
-  getRoadmapPhaseInternal,
-  resolveModelInternal,
-  pathExistsInternal,
+  execGit,
   generateSlugInternal,
+  getArchivedPhaseDirs,
   getMilestoneInfo,
+  getRoadmapPhaseInternal,
+  isGitIgnored,
+  loadConfig,
+  normalizePhaseName,
+  output,
+  parseProvider: modelDetection.parseProvider,
+  pathExistsInternal,
+  safeReadFile,
+  searchPhaseInDir,
   toPosixPath,
+  findPhaseInternal,
+  resolveModelInternal,
 };
