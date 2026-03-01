@@ -140,6 +140,7 @@ const commands = require('./lib/commands.cjs');
 const init = require('./lib/init.cjs');
 const frontmatter = require('./lib/frontmatter.cjs');
 const modelDetection = require('./lib/model-detection.cjs');
+const interactivePrompts = require('./lib/interactive-prompts.cjs');
 
 // ─── CLI Router ───────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ async function main() {
   const command = args[0];
 
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, init');
+    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, interactive-profile, init');
   }
 
   switch (command) {
@@ -584,6 +585,26 @@ async function main() {
     case 'detect-models': {
       const result = modelDetection.detectAvailableModels(cwd);
       output(result, raw);
+      break;
+    }
+
+    case 'interactive-profile': {
+      const testMode = args.includes('--test');
+
+      if (testMode) {
+        // Mock selections for automated testing
+        const mockSelections = {
+          planning: 'claude-3-5-sonnet-20241022',
+          execution: 'claude-3-5-sonnet-20241022',
+          research: 'claude-3-5-haiku-20241022'
+        };
+        output(mockSelections, raw);
+      } else {
+        // Interactive mode: detect models and prompt user
+        const modelResult = modelDetection.detectAvailableModels(cwd);
+        const selections = await interactivePrompts.promptThreeQuestionFlow(modelResult.models);
+        output(selections, raw);
+      }
       break;
     }
 
