@@ -142,9 +142,77 @@ function resolveModelEnhanced(cwd, agentType) {
   return resolveLegacyModel(config, agentType);
 }
 
+/**
+ * Resolve model with transparency details for each tier.
+ * @param {string} cwd - Project root directory
+ * @param {string} agentType - Agent identifier
+ * @returns {{ model: string, resolution: Array<object> }} Resolution output
+ */
+function resolveModelWithDetails(cwd, agentType) {
+  const config = core.loadConfig(cwd);
+  const resolutionChain = [];
+
+  const override = config.model_overrides?.[agentType];
+  if (override) {
+    const model = normalizeModelName(override);
+    resolutionChain.push({
+      tier: 1,
+      source: 'config.model_overrides',
+      model,
+      reason: 'Per-agent override',
+    });
+    return { model, resolution: resolutionChain };
+  }
+
+  if (config.model_profile_name) {
+    const category = getAgentCategory(agentType);
+    const profile = findCustomProfile(cwd, config.model_profile_name);
+
+    if (profile && category && profile.agents && profile.agents[category]) {
+      const models = profile.agents[category];
+      if (Array.isArray(models) && models.length > 0) {
+        const model = models[0];
+        resolutionChain.push({
+          tier: 2,
+          source: 'custom_profile',
+          profileName: config.model_profile_name,
+          category,
+          model,
+          reason: 'Custom profile match',
+        });
+        return { model, resolution: resolutionChain };
+      }
+    }
+
+    resolutionChain.push({
+      tier: 2,
+      source: 'custom_profile',
+      profileName: config.model_profile_name,
+      model: null,
+      reason: 'Profile or category not found, falling back',
+    });
+  }
+
+  const legacyProfileName = config.model_profile || 'balanced';
+  const agentModels = core.MODEL_PROFILES[agentType];
+  const resolved = agentModels?.[legacyProfileName] || agentModels?.['balanced'] || 'sonnet';
+  const model = normalizeModelName(resolved);
+
+  resolutionChain.push({
+    tier: 3,
+    source: 'MODEL_PROFILES',
+    profileName: legacyProfileName,
+    model,
+    reason: 'Legacy profile fallback',
+  });
+
+  return { model, resolution: resolutionChain };
+}
+
 module.exports = {
   CATEGORY_AGENTS,
   getAgentCategory,
   findCustomProfile,
   resolveModelEnhanced,
+  resolveModelWithDetails,
 };
