@@ -6,6 +6,8 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { safeReadFile, loadConfig, isGitIgnored, execGit, normalizePhaseName, comparePhaseNum, getArchivedPhaseDirs, generateSlugInternal, getMilestoneInfo, resolveModelWithDetails, MODEL_PROFILES, output, error, findPhaseInternal } = require('./core.cjs');
 const { extractFrontmatter } = require('./frontmatter.cjs');
+const profiles = require('./profiles.cjs');
+const profileResolution = require('./profile-resolution.cjs');
 
 function cmdGenerateSlug(text, raw) {
   if (!text) {
@@ -492,7 +494,7 @@ function cmdScaffold(cwd, type, options, raw) {
   switch (type) {
     case 'context': {
       filePath = path.join(phaseDir, `${padded}-CONTEXT.md`);
-      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during /gsd:discuss-phase ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
+      content = `---\nphase: "${padded}"\nname: "${name || phaseInfo?.phase_name || 'Unnamed'}"\ncreated: ${today}\n---\n\n# Phase ${phase}: ${name || phaseInfo?.phase_name || 'Unnamed'} — Context\n\n## Decisions\n\n_Decisions will be captured during /gsd:discuss_phase ${phase}_\n\n## Discretion Areas\n\n_Areas where the executor can use judgment_\n\n## Deferred Ideas\n\n_Ideas to consider later_\n`;
       break;
     }
     case 'uat': {
@@ -532,6 +534,283 @@ function cmdScaffold(cwd, type, options, raw) {
   output({ created: true, path: relPath }, raw, relPath);
 }
 
+// ─── List Profiles Command ────────────────────────────────────────────────────────
+
+function showListProfilesHelp() {
+  const help = `Usage: gsd-tools list-profiles [--raw]
+
+List all available profiles with their model assignments.
+
+Options:
+  --raw    Output as JSON for programmatic use
+
+Examples:
+  gsd-tools list-profiles
+  gsd-tools list-profiles --raw
+
+Output columns:
+  Name      - Profile name
+  Source    - global, project, or built-in
+  Status    - ACTIVE if currently selected
+  Planning  - Model for planning agents
+  Execution - Model for execution agents
+  Research  - Model for research agents
+`;
+  process.stdout.write(help);
+}
+
+function cmdListProfiles(cwd, raw) {
+  // Load config to get active profile info
+  const config = loadConfig(cwd);
+  const activeCustomProfile = config.model_profile_name;
+  const activeLegacyProfile = config.model_profile;
+  
+  // Load all custom profiles (merged global + project)
+  const allProfiles = profiles.loadAllProfiles(cwd);
+  
+  // Build profile list with source attribution
+  const profileList = [];
+  
+  // Add custom profiles with source tracking
+  if (allProfiles.globalLoaded) {
+    for (const profile of allProfiles.profiles) {
+      // Check if this profile came from global (not overridden by project)
+      // Since merge happens, we need to track which profiles were loaded from where
+      // Simplified: use the result paths to determine source
+      // Actually, loadAllProfiles returns merged profiles. We need to track source during merge.
+      // Let's check: if globalPath has profiles that aren't in projectPath, they're global.
+      // For simplicity, we'll use a different approach - check if profile exists in project
+      const projectResult = profiles.loadProjectProfiles(cwd);
+      const projectNames = new Set(projectResult.profiles.map(p => p.name));
+      
+      // Determine if this profile is from global or project
+      let source = 'global';
+      if (projectNames.has(profile.name)) {
+        source = 'project';
+      }
+      
+      const isActive = profile.name === activeCustomProfile;
+      const isLegacyActive = !activeCustomProfile && profile.name === activeLegacyProfile;
+      
+      profileList.push({
+        name: profile.name,
+        source: source,
+        active: isActive || isLegacyActive,
+        agents: {
+          planning: profile.agents?.planning?.[0] || '-',
+          execution: profile.agents?.execution?.[0] || '-',
+          research: profile.agents?.research?.[0] || '-',
+        },
+      });
+    }
+  }
+  
+  // Add built-in legacy profiles
+  const legacyProfiles = ['quality', 'balanced', 'budget'];
+  for (const legacyName of legacyProfiles) {
+    // Get models from MODEL_PROFILES for each category
+    const planningAgents = ['gsd-planner', 'gsd-roadmapper'];
+    const executionAgents = ['gsd-executor', 'gsd-debugger'];
+    const researchAgents = ['gsd-phase-researcher', 'gsd-project-researcher', 'gsd-research-synthesizer', 'gsd-codebase-mapper', 'gsd-verifier', 'gsd-plan-checker', 'gsd-integration-checker'];
+    
+    // Use first agent in each category to get the model
+    const planningModel = MODEL_PROFILES[planningAgents[0]]?.[legacyName] || '-';
+    const executionModel = MODEL_PROFILES[executionAgents[0]]?.[legacyName] || '-';
+    const researchModel = MODEL_PROFILES[researchAgents[0]]?.[legacyName] || '-';
+    
+    const isActive = !activeCustomProfile && legacyName === activeLegacyProfile;
+    
+    profileList.push({
+      name: legacyName,
+      source: 'built-in',
+      active: isActive,
+      agents: {
+        planning: planningModel,
+        execution: executionModel,
+        research: researchModel,
+      },
+    });
+  }
+  
+  if (raw) {
+    output({ profiles: profileList }, raw);
+    return;
+  }
+  
+  // Human-readable table - write directly to stdout (output() always returns JSON when raw=false)
+  const nameWidth = Math.max(10, ...profileList.map(p => p.name.length));
+  const sourceWidth = Math.max(8, ...profileList.map(p => p.source.length));
+  const planningWidth = Math.max(10, ...profileList.map(p => p.agents.planning.length));
+  const executionWidth = Math.max(10, ...profileList.map(p => p.agents.execution.length));
+  const researchWidth = Math.max(10, ...profileList.map(p => p.agents.research.length));
+  
+  const header = [
+    'Name'.padEnd(nameWidth),
+    'Source'.padEnd(sourceWidth),
+    'Status',
+    'Planning'.padEnd(planningWidth),
+    'Execution'.padEnd(executionWidth),
+    'Research'.padEnd(researchWidth),
+  ].join('  ');
+  
+  const separator = [
+    '='.repeat(nameWidth),
+    '='.repeat(sourceWidth),
+    '======',
+    '='.repeat(planningWidth),
+    '='.repeat(executionWidth),
+    '='.repeat(researchWidth),
+  ].join('  ');
+  
+  const rows = profileList.map(p => [
+    p.name.padEnd(nameWidth),
+    p.source.padEnd(sourceWidth),
+    p.active ? 'ACTIVE' : '',
+    p.agents.planning.padEnd(planningWidth),
+    p.agents.execution.padEnd(executionWidth),
+    p.agents.research.padEnd(researchWidth),
+  ].join('  '));
+  
+  const table = [header, separator, ...rows].join('\n');
+  process.stdout.write(table + '\n');
+}
+
+// ─── View Profile Command ─────────────────────────────────────────────────────────
+
+function showViewProfileHelp() {
+  const help = `Usage: gsd-tools view-profile <profile-name> [--raw]
+
+View detailed information about a profile, including which model
+each agent will use when this profile is active.
+
+Arguments:
+  profile-name  Name of the profile to view
+
+Options:
+  --raw         Output as JSON for programmatic use
+
+Examples:
+  gsd-tools view-profile my-custom
+  gsd-tools view-profile balanced
+  gsd-tools view-profile quality --raw
+
+Use "gsd-tools list-profiles" to see all available profiles.
+`;
+  process.stdout.write(help);
+}
+
+function cmdViewProfile(cwd, profileName, raw) {
+  // If no profile name, show help
+  if (!profileName) {
+    showViewProfileHelp();
+    return;
+  }
+  
+  // Load config for active profile check
+  const config = loadConfig(cwd);
+  const activeCustomProfile = config.model_profile_name;
+  const activeLegacyProfile = config.model_profile;
+  
+  // Check if it's a custom profile first
+  const customProfile = profileResolution.findCustomProfile(cwd, profileName);
+  
+  let profileData;
+  
+  if (customProfile) {
+    // It's a custom profile
+    const isActive = customProfile.name === activeCustomProfile;
+    
+    // Determine source
+    const projectResult = profiles.loadProjectProfiles(cwd);
+    const projectNames = new Set(projectResult.profiles.map(p => p.name));
+    const source = projectNames.has(customProfile.name) ? 'project' : 'global';
+    
+    // Build expanded agents object from CATEGORY_AGENTS
+    const agents = {};
+    for (const [category, agentList] of Object.entries(profileResolution.CATEGORY_AGENTS)) {
+      const model = customProfile.agents?.[category]?.[0] || null;
+      if (model) {
+        for (const agent of agentList) {
+          agents[agent] = model;
+        }
+      }
+    }
+    
+    profileData = {
+      name: customProfile.name,
+      active: isActive,
+      source: source,
+      categories: {
+        planning: customProfile.agents?.planning?.[0] || '-',
+        execution: customProfile.agents?.execution?.[0] || '-',
+        research: customProfile.agents?.research?.[0] || '-',
+      },
+      agents: agents,
+    };
+  } else {
+    // Check if it's a legacy profile
+    const legacyProfiles = ['quality', 'balanced', 'budget'];
+    if (!legacyProfiles.includes(profileName)) {
+      output({ error: `Profile '${profileName}' not found` }, raw);
+      return;
+    }
+    
+    // It's a legacy profile
+    const isActive = !activeCustomProfile && profileName === activeLegacyProfile;
+    
+    // Build categories and agents from MODEL_PROFILES
+    const categories = {};
+    const agents = {};
+    
+    for (const [agentType, profileModels] of Object.entries(MODEL_PROFILES)) {
+      const model = profileModels[profileName];
+      if (model) {
+        const category = profileResolution.getAgentCategory(agentType);
+        if (category) {
+          if (!categories[category]) {
+            categories[category] = model;
+          }
+          agents[agentType] = model;
+        }
+      }
+    }
+    
+    profileData = {
+      name: profileName,
+      active: isActive,
+      source: 'built-in',
+      categories: {
+        planning: categories.planning || '-',
+        execution: categories.execution || '-',
+        research: categories.research || '-',
+      },
+      agents: agents,
+    };
+  }
+  
+  if (raw) {
+    output(profileData, raw);
+    return;
+  }
+  
+  // Human-readable format - write directly to stdout
+  let text = `Profile: ${profileData.name}\n`;
+  text += `Source: ${profileData.source}\n`;
+  text += `Active: ${profileData.active ? 'Yes' : 'No'}\n\n`;
+  
+  text += `Categories:\n`;
+  text += `  Planning:  ${profileData.categories.planning}\n`;
+  text += `  Execution: ${profileData.categories.execution}\n`;
+  text += `  Research:  ${profileData.categories.research}\n\n`;
+  
+  text += `Agents:\n`;
+  for (const [agent, model] of Object.entries(profileData.agents)) {
+    text += `  ${agent.padEnd(30)} ${model}\n`;
+  }
+  
+  process.stdout.write(text);
+}
+
 module.exports = {
   cmdGenerateSlug,
   cmdCurrentTimestamp,
@@ -545,4 +824,9 @@ module.exports = {
   cmdProgressRender,
   cmdTodoComplete,
   cmdScaffold,
+  // Profile commands
+  showListProfilesHelp,
+  cmdListProfiles,
+  showViewProfileHelp,
+  cmdViewProfile,
 };
