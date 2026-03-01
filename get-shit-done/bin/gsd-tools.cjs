@@ -141,6 +141,7 @@ const init = require('./lib/init.cjs');
 const frontmatter = require('./lib/frontmatter.cjs');
 const modelDetection = require('./lib/model-detection.cjs');
 const interactivePrompts = require('./lib/interactive-prompts.cjs');
+const profiles = require('./lib/profiles.cjs');
 
 // ─── CLI Router ───────────────────────────────────────────────────────────────
 
@@ -174,7 +175,7 @@ async function main() {
   const command = args[0];
 
   if (!command) {
-    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, interactive-profile, init');
+    error('Usage: gsd-tools <command> [args] [--raw] [--cwd <path>]\nCommands: state, resolve-model, find-phase, commit, verify-summary, verify, frontmatter, template, generate-slug, current-timestamp, list-todos, verify-path-exists, config-ensure-section, detect-models, interactive-profile, create-profile, init');
   }
 
   switch (command) {
@@ -605,6 +606,141 @@ async function main() {
         const selections = await interactivePrompts.promptThreeQuestionFlow(modelResult.models);
         output(selections, raw);
       }
+      break;
+    }
+
+    case 'create-profile': {
+      const testMode = args.includes('--test');
+
+      // Detect runtime and available models
+      const detection = modelDetection.detectAvailableModels(cwd);
+      const runtime = detection.runtime;
+      const availableModels = detection.models;
+      const modelNames = new Set(availableModels.map(m => m.name));
+
+      // Get storage paths
+      const globalPath = profiles.getGlobalProfilesPath(runtime);
+      const projectPath = profiles.getProjectProfilesPath(cwd);
+
+      let profileName = '';
+      let storageLocation = '';
+      let selections = {
+        planning: '',
+        execution: '',
+        research: ''
+      };
+
+      if (testMode) {
+        // Non-interactive mode for testing
+        profileName = `test-profile-${Date.now()}`;
+        storageLocation = 'project';
+        selections = {
+          planning: 'claude-3-5-sonnet-20241022',
+          execution: 'claude-3-5-sonnet-20241022',
+          research: 'claude-3-5-haiku-20241022'
+        };
+      } else {
+        // Interactive mode
+        profileName = await interactivePrompts.promptProfileName();
+        if (!profileName) {
+          error('Profile name required. Aborting.');
+          process.exit(1);
+        }
+
+        storageLocation = await interactivePrompts.promptStorageLocation(globalPath, projectPath);
+        if (!storageLocation) {
+          error('Storage location required. Aborting.');
+          process.exit(1);
+        }
+
+        selections = await interactivePrompts.promptThreeQuestionFlow(availableModels);
+      }
+
+      // Build profile object
+      const profile = {
+        name: profileName,
+        agents: {
+          planning: selections.planning ? [selections.planning] : [],
+          execution: selections.execution ? [selections.execution] : [],
+          research: selections.research ? [selections.research] : []
+        }
+      };
+
+      // Validate profile structure
+      const validation = profiles.validateProfile(profile);
+      if (!validation.valid) {
+        error('Invalid profile structure:\n' + validation.errors.join('\n'));
+        process.exit(1);
+      }
+
+      // Validate model names exist in available models
+      const missingModels = [];
+      const selectedModels = [
+        ...profile.agents.planning,
+        ...profile.agents.execution,
+        ...profile.agents.research
+      ];
+
+      for (const modelName of selectedModels) {
+        if (!modelNames.has(modelName)) {
+          missingModels.push(modelName);
+        }
+      }
+
+      if (missingModels.length > 0) {
+        error('Model(s) not available: ' + missingModels.join(', ') + '\nAvailable models: ' + Array.from(modelNames).join(', '));
+        process.exit(1);
+      }
+
+      // Check for duplicate profile name
+      const exists = profiles.profileExists(cwd, profileName, runtime);
+      if (exists.exists) {
+        error(`Profile "${profileName}" already exists in ${exists.source} storage. Use a different name.`);
+        process.exit(1);
+      }
+
+      // Load existing profiles from selected location
+      let existingProfiles = [];
+      if (storageLocation === 'global') {
+        const loadResult = profiles.loadGlobalProfiles(runtime);
+        if (loadResult.errors.length > 0) {
+          error('Failed to load global profiles:\n' + loadResult.errors.join('\n'));
+          process.exit(1);
+        }
+        existingProfiles = loadResult.profiles;
+      } else {
+        const loadResult = profiles.loadProjectProfiles(cwd);
+        if (loadResult.errors.length > 0) {
+          error('Failed to load project profiles:\n' + loadResult.errors.join('\n'));
+          process.exit(1);
+        }
+        existingProfiles = loadResult.profiles;
+      }
+
+      // Append new profile
+      existingProfiles.push(profile);
+
+      // Save profiles
+      let saveResult;
+      if (storageLocation === 'global') {
+        saveResult = profiles.saveGlobalProfiles(runtime, existingProfiles);
+      } else {
+        saveResult = profiles.saveProjectProfiles(cwd, existingProfiles);
+      }
+
+      if (!saveResult.saved) {
+        error('Failed to save profile:\n' + saveResult.errors.join('\n'));
+        process.exit(1);
+      }
+
+      // Output success
+      output({
+        saved: true,
+        profile: profileName,
+        storage: storageLocation,
+        path: saveResult.path,
+        agents: profile.agents
+      }, raw);
       break;
     }
 
