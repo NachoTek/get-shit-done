@@ -312,6 +312,71 @@ Quick switch model profile for GSD agents.
 
 Usage: `/gsd:set-profile budget`
 
+### Model Profiles
+
+Manage custom model profiles that control which Claude model each GSD agent uses.
+
+**Profile types:**
+- **Legacy** (quality/balanced/budget): Built-in presets, cannot be modified
+- **Custom**: User-defined profiles you create and manage
+
+**`/gsd:list-profiles`**
+List all available model profiles with active indicator and source attribution.
+
+- Shows profile name, source (custom/legacy), and active status
+- Indicates storage location (project/global/built-in)
+- Use to discover available profiles
+
+Usage: `/gsd:list-profiles`
+
+**`/gsd:view-profile`**
+View detailed profile configuration showing agent-to-model mappings.
+
+- Displays model assignment for each agent category
+- Shows profile source and storage location
+- Requires profile name argument
+
+Usage: `/gsd:view-profile <profile-name>`
+Example: `/gsd:view-profile my-custom-profile`
+
+**`/gsd:profile-info`**
+Show currently active profile with resolution examples.
+
+- Displays active profile name and source
+- Shows how agents resolve to specific models
+- No arguments needed
+
+Usage: `/gsd:profile-info`
+
+**`/gsd:create-profile`**
+Create a custom model profile via interactive 3-question flow.
+
+- Auto-detects available models from your system
+- Prompts for profile name, storage location, and model selections
+- Choose project-level (this project only) or global (all projects)
+
+Usage: `/gsd:create-profile`
+
+**`/gsd:update-profile`**
+Update an existing custom profile's model assignments.
+
+- Shows current model selections during prompts
+- Built-in profiles (quality/balanced/budget) cannot be modified
+- Only works on custom profiles you've created
+
+Usage: `/gsd:update-profile <profile-name>`
+Example: `/gsd:update-profile my-custom-profile`
+
+**`/gsd:delete-profile`**
+Delete a custom profile with appropriate safeguards.
+
+- Confirms before deleting if profile is currently active
+- Built-in profiles (quality/balanced/budget) cannot be deleted
+- Only works on custom profiles you've created
+
+Usage: `/gsd:delete-profile <profile-name>`
+Example: `/gsd:delete-profile my-custom-profile`
+
 ### Utility Commands
 
 **`/gsd:cleanup`**
