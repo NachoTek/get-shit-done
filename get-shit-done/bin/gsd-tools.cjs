@@ -779,10 +779,11 @@ async function main() {
     case 'update-profile': {
       const updateProfileName = args[1];
       const updateHelpFlag = args.includes('--help') || args.includes('-h');
+      const testMode = args.includes('--test');
       if (updateHelpFlag || !updateProfileName) {
         commands.showUpdateProfileHelp();
       } else {
-        await commands.cmdUpdateProfile(cwd, updateProfileName, raw);
+        await commands.cmdUpdateProfile(cwd, updateProfileName, raw, testMode);
       }
       break;
     }
