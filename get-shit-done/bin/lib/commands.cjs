@@ -575,7 +575,7 @@ function cmdListProfiles(cwd, raw) {
   const profileList = [];
   
   // Add custom profiles with source tracking
-  if (allProfiles.globalLoaded) {
+  if (allProfiles.profiles.length > 0) {
     for (const profile of allProfiles.profiles) {
       // Check if this profile came from global (not overridden by project)
       // Since merge happens, we need to track which profiles were loaded from where
@@ -1211,7 +1211,7 @@ Notes:
   process.stdout.write(help);
 }
 
-async function cmdUpdateProfile(cwd, profileName, raw) {
+async function cmdUpdateProfile(cwd, profileName, raw, testMode = false) {
   // If no profile name, show help
   if (!profileName) {
     showUpdateProfileHelp();
@@ -1263,8 +1263,18 @@ async function cmdUpdateProfile(cwd, profileName, raw) {
   const availableModels = detection.models;
   const modelNames = new Set(availableModels.map(m => m.name));
 
-  // Get new model selections via interactive prompts
-  const selections = await interactivePrompts.promptThreeQuestionFlow(availableModels);
+  // Get new model selections via interactive prompts or mock for testing
+  let selections;
+  if (testMode) {
+    // Use mock selections for automated testing (same pattern as create-profile)
+    selections = {
+      planning: availableModels[0]?.name || 'claude-3-5-sonnet-20241022',
+      execution: availableModels[0]?.name || 'claude-3-5-sonnet-20241022',
+      research: availableModels[1]?.name || availableModels[0]?.name || 'claude-3-5-haiku-20241022'
+    };
+  } else {
+    selections = await interactivePrompts.promptThreeQuestionFlow(availableModels);
+  }
 
   // Build updated profile object
   const updatedProfile = {
