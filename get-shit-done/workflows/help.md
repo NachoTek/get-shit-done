@@ -537,6 +537,14 @@ Example config:
 /gsd:check-todos api             # Filter by area
 ```
 
+**Creating and using a custom profile:**
+
+```
+/gsd:create-profile          # Interactive creation
+/gsd:list-profiles           # Verify it appears
+/gsd:set-profile my-profile  # Switch to it
+```
+
 **Debugging an issue:**
 
 ```
