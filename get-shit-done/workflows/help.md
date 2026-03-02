@@ -298,7 +298,7 @@ Usage: `/gsd:plan-milestone-gaps`
 Configure workflow toggles and model profile interactively.
 
 - Toggle researcher, plan checker, verifier agents
-- Select model profile (quality/balanced/budget)
+- Select model profile (includes custom profiles you've created)
 - Updates `.planning/config.json`
 
 Usage: `/gsd:settings`
@@ -306,11 +306,12 @@ Usage: `/gsd:settings`
 **`/gsd:set-profile <profile>`**
 Quick switch model profile for GSD agents.
 
-- `quality` — Opus everywhere except verification
-- `balanced` — Opus for planning, Sonnet for execution (default)
-- `budget` — Sonnet for writing, Haiku for research/verification
+- Accepts legacy profiles (quality/balanced/budget) or custom profile names
+- Legacy profiles: `quality` (Opus everywhere), `balanced` (default), `budget` (lowest cost)
+- Custom profiles: Use any profile name from `/gsd:list-profiles`
 
-Usage: `/gsd:set-profile budget`
+Usage: `/gsd:set-profile <profile-name>`
+Example: `/gsd:set-profile my-custom-profile`
 
 ### Model Profiles
 
