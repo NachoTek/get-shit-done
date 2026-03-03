@@ -25,6 +25,15 @@ function detectRuntime(cwd) {
   if (env.GEMINI_CONFIG_PATH || env.GOOGLE_APPLICATION_CREDENTIALS) return 'gemini';
   if (env.CODEX_CONFIG_PATH) return 'codex';
 
+  // Check if opencode command is available
+  try {
+    const { execSync } = require('child_process');
+    execSync('opencode --version', { stdio: 'ignore', timeout: 1000 });
+    return 'opencode';
+  } catch (err) {
+    // opencode command not available
+  }
+
   // Fall back to checking config file existence
   const homedir = os.homedir();
 
@@ -151,18 +160,44 @@ function extractModelsFromConfig(config, runtime) {
 }
 
 /**
+ * Get opencode models by querying the opencode CLI
+ * @returns {Array<{ name: string, source: string }>} Array of model objects
+ */
+function getOpencodeModels() {
+  try {
+    const { execSync } = require('child_process');
+    const output = execSync('opencode models', { encoding: 'utf-8', timeout: 5000 });
+    const lines = output.trim().split('\n');
+    
+    return lines
+      .filter(line => line.trim() && !line.includes('Error:'))
+      .map(line => {
+        const modelName = line.trim();
+        return { name: modelName, source: 'opencode-cli' };
+      });
+  } catch (err) {
+    // Fallback to common opencode models if command fails
+    return [
+      { name: 'zai-coding-plan/glm-5', source: 'default' },
+      { name: 'zai-coding-plan/glm-4.7-flash', source: 'default' },
+      { name: 'openai/gpt-5.1-codex', source: 'default' },
+    ];
+  }
+}
+
+/**
  * Get common default models for runtime
  * @param {string} runtime - Runtime identifier
  * @returns {Array<{ name: string, source: string }>} Array of default model objects
  */
 function getCommonDefaults(runtime) {
+  // For opencode, query actual available models
+  if (runtime === 'opencode') {
+    return getOpencodeModels();
+  }
+  
   const defaults = {
     claude: [
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-      'claude-3-opus-20240229',
-    ],
-    opencode: [
       'claude-3-5-sonnet-20241022',
       'claude-3-5-haiku-20241022',
       'claude-3-opus-20240229',
