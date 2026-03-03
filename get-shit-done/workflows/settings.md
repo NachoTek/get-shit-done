@@ -70,7 +70,27 @@ AskUserQuestion([
     question: "Which model profile for agents?",
     header: "Model",
     multiSelect: false,
-    options: <DYNAMIC_OPTIONS_FROM_PROFILES>
+    options: [
+      // Build from $PROFILES JSON loaded in load_profiles step
+      // Example structure after parsing:
+      // [
+      //   { label: "✓ balanced", description: "Opus for planning, Sonnet for execution/verification" },
+      //   { label: "budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" },
+      //   { label: "quality", description: "Opus everywhere except verification (highest cost)" },
+      //   { label: "my-custom", description: "(project custom) - claude-sonnet-4/claude-sonnet-4/claude-sonnet-4" }
+      // ]
+      //
+      // Parse $PROFILES JSON and build array:
+      // 1. Parse: profiles = JSON.parse($PROFILES).profiles
+      // 2. Sort: active profile first, then alphabetically by name
+      // 3. For each profile:
+      //    - label = (profile.active ? "✓ " : "") + profile.name
+      //    - description =
+      //        if profile.name == "quality": "Opus everywhere except verification (highest cost)"
+      //        else if profile.name == "balanced": "Opus for planning, Sonnet for execution/verification"
+      //        else if profile.name == "budget": "Sonnet for writing, Haiku for research/verification (lowest cost)"
+      //        else: "(" + profile.source + " custom) - " + profile.agents.planning + "/" + profile.agents.execution + "/" + profile.agents.research
+    ]
   },
   {
     question: "Spawn Plan Researcher? (researches domain before planning)",
