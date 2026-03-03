@@ -668,7 +668,7 @@ function cmdListProfiles(cwd, raw) {
   const rows = profileList.map(p => [
     p.name.padEnd(nameWidth),
     p.source.padEnd(sourceWidth),
-    p.active ? 'ACTIVE' : '',
+    (p.active ? 'ACTIVE' : '').padEnd(6),
     p.agents.planning.padEnd(planningWidth),
     p.agents.execution.padEnd(executionWidth),
     p.agents.research.padEnd(researchWidth),
