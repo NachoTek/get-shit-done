@@ -31,6 +31,49 @@ Build options array:
   - Custom: "({source} custom) - {planning}/{execution}/{research}"
 </step>
 
+<step name="build_profile_options">
+From the PROFILES JSON loaded in load_profiles step, build PROFILE_OPTIONS array.
+
+**YOU MUST EXECUTE THIS - do not skip or assume it's already done.**
+
+Parse the $PROFILES variable and construct an options array:
+
+```
+profiles = JSON.parse(PROFILES).profiles
+
+PROFILE_OPTIONS = profiles.map(profile => {
+  // Active indicator
+  label = (profile.active ? "✓ " : "") + profile.name
+  
+  // Description based on profile type
+  if (profile.name == "quality") {
+    description = "Built-in: Opus everywhere (highest cost)"
+  } else if (profile.name == "balanced") {
+    description = "Built-in: Opus planner, Sonnet executor"
+  } else if (profile.name == "budget") {
+    description = "Built-in: Sonnet writer, Haiku research"
+  } else {
+    // Custom profile
+    description = "(" + profile.source + " custom) - " + 
+                  profile.agents.planning + "/" + 
+                  profile.agents.execution + "/" + 
+                  profile.agents.research
+  }
+  
+  return { label, description }
+})
+
+// Sort: active profile first, then alphabetically
+PROFILE_OPTIONS.sort((a, b) => {
+  if (a.label.startsWith("✓")) return -1
+  if (b.label.startsWith("✓")) return 1
+  return a.label.localeCompare(b.label)
+})
+```
+
+After this step, PROFILE_OPTIONS contains the complete options array.
+</step>
+
 <step name="ensure_and_load_config">
 Ensure config exists and load current state:
 
@@ -70,27 +113,7 @@ AskUserQuestion([
     question: "Which model profile for agents?",
     header: "Model",
     multiSelect: false,
-    options: [
-      // Build from $PROFILES JSON loaded in load_profiles step
-      // Example structure after parsing:
-      // [
-      //   { label: "✓ balanced", description: "Opus for planning, Sonnet for execution/verification" },
-      //   { label: "budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" },
-      //   { label: "quality", description: "Opus everywhere except verification (highest cost)" },
-      //   { label: "my-custom", description: "(project custom) - claude-sonnet-4/claude-sonnet-4/claude-sonnet-4" }
-      // ]
-      //
-      // Parse $PROFILES JSON and build array:
-      // 1. Parse: profiles = JSON.parse($PROFILES).profiles
-      // 2. Sort: active profile first, then alphabetically by name
-      // 3. For each profile:
-      //    - label = (profile.active ? "✓ " : "") + profile.name
-      //    - description =
-      //        if profile.name == "quality": "Opus everywhere except verification (highest cost)"
-      //        else if profile.name == "balanced": "Opus for planning, Sonnet for execution/verification"
-      //        else if profile.name == "budget": "Sonnet for writing, Haiku for research/verification (lowest cost)"
-      //        else: "(" + profile.source + " custom) - " + profile.agents.planning + "/" + profile.agents.execution + "/" + profile.agents.research
-    ]
+    options: PROFILE_OPTIONS  // <-- Use the array built in build_profile_options step
   },
   {
     question: "Spawn Plan Researcher? (researches domain before planning)",
