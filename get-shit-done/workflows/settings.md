@@ -8,6 +8,29 @@ Read all files referenced by the invoking prompt's execution_context before star
 
 <process>
 
+<step name="load_profiles">
+Load all available profiles (built-in + custom) dynamically:
+
+```bash
+PROFILES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" list-profiles --raw)
+```
+
+Parse JSON output. Each profile has:
+- `name` — profile name
+- `source` — "built-in", "project", or "global"
+- `active` — true/false
+- `agents` — { planning, execution, research } model names
+
+Build options array:
+- Sort: active profile first, then alphabetically by name
+- Active profile gets `✓` prefix in label
+- Description pattern:
+  - Built-in Quality: "Opus everywhere except verification (highest cost)"
+  - Built-in Balanced: "Opus for planning, Sonnet for execution/verification"
+  - Built-in Budget: "Sonnet for writing, Haiku for research/verification (lowest cost)"
+  - Custom: "({source} custom) - {planning}/{execution}/{research}"
+</step>
+
 <step name="ensure_and_load_config">
 Ensure config exists and load current state:
 
@@ -37,16 +60,17 @@ Parse current values (default to `true` if not present):
 Use AskUserQuestion with current values pre-selected:
 
 ```
+// Build profile options from $PROFILES JSON
+// Sort: active first, then alphabetically
+// Label: ✓ {name} for active, {name} for others
+// Description: built-in use known descriptions, custom show source + models
+
 AskUserQuestion([
   {
     question: "Which model profile for agents?",
     header: "Model",
     multiSelect: false,
-    options: [
-      { label: "Quality", description: "Opus everywhere except verification (highest cost)" },
-      { label: "Balanced (Recommended)", description: "Opus for planning, Sonnet for execution/verification" },
-      { label: "Budget", description: "Sonnet for writing, Haiku for research/verification (lowest cost)" }
-    ]
+    options: <DYNAMIC_OPTIONS_FROM_PROFILES>
   },
   {
     question: "Spawn Plan Researcher? (researches domain before planning)",
