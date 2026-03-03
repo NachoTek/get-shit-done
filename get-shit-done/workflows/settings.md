@@ -95,7 +95,8 @@ Parse current values (default to `true` if not present):
 - `workflow.plan_check` — spawn plan checker during plan-phase
 - `workflow.verifier` — spawn verifier during execute-phase
 - `workflow.nyquist_validation` — validation architecture research during plan-phase
-- `model_profile` — which model each agent uses (default: `balanced`)
+- `model_profile` — which model each agent uses (default: `balanced`) - for legacy profiles
+- `model_profile_name` — custom profile name (if using custom profile)
 - `git.branching_strategy` — branching approach (default: `"none"`)
 </step>
 
@@ -175,12 +176,17 @@ AskUserQuestion([
 </step>
 
 <step name="update_config">
-Merge new settings into existing config.json:
+Update the profile using gsd-tools set-profile command (handles both custom and built-in):
+
+```bash
+node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" set-profile "<selected_profile_name>"
+```
+
+Then merge workflow settings into existing config.json:
 
 ```json
 {
   ...existing_config,
-  "model_profile": "quality" | "balanced" | "budget",
   "workflow": {
     "research": true/false,
     "plan_check": true/false,
@@ -250,7 +256,7 @@ Display:
 
 | Setting              | Value |
 |----------------------|-------|
-| Model Profile        | {quality/balanced/budget} |
+| Model Profile        | {profile_name} ({custom/built-in}) |
 | Plan Researcher      | {On/Off} |
 | Plan Checker         | {On/Off} |
 | Execution Verifier   | {On/Off} |
